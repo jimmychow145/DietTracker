@@ -8,7 +8,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 
-class MainActivity : AppCompatActivity() {
+class LandingScreen : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -20,11 +20,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Find the button from the layout
-        val button = findViewById<Button>(R.id.startbutton)
+        val button = findViewById<Button>(R.id.StartButton)
 
         // Set the click listener to change screens
         button.setOnClickListener {
-            val intent = Intent(this, MainScreen::class.java)
+            val intent = Intent(this, AuthScreen::class.java)
             startActivity(intent)
         }
     }
