@@ -12,9 +12,11 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.firebase.Firebase
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.firestore
+import kotlin.math.log
 
 class AuthScreen : AppCompatActivity() {
     private lateinit var auth: FirebaseAuth
@@ -63,6 +65,10 @@ class AuthScreen : AppCompatActivity() {
                         )
                     )
 
+                    val logdata = hashMapOf( "action" to "signUp", "time" to Timestamp.now())
+
+                    db.collection("logs").add(logdata)
+
                     // Add a new document with a generated ID
                     db.collection("users").document(user!!.uid)
                         .set(userData)
@@ -96,6 +102,10 @@ class AuthScreen : AppCompatActivity() {
                 if (task.isSuccessful) {
                     // Sign in success, update UI with the signed-in user's information
                     Log.d(TAG, "signInWithEmail:success")
+                    val logdata = hashMapOf( "action" to "signin", "time" to Timestamp.now())
+                    val db = Firebase.firestore
+
+                    db.collection("logs").add(logdata)
                     val user = auth.currentUser
                     val intent = Intent(this, MainScreen::class.java)
                     startActivity(intent)
