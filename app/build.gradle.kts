@@ -38,6 +38,8 @@ android {
 dependencies {
     implementation(libs.androidx.activity.ktx)
     implementation("com.google.android.gms:play-services-location:21.4.0")
+    implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation(libs.androidx.annotation)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.constraintlayout)
