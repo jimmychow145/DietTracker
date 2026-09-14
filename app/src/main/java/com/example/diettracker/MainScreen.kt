@@ -1,19 +1,7 @@
 package com.example.diettracker
+
 import android.Manifest
-import android.widget.TextView
-import androidx.activity.enableEdgeToEdge
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.lifecycle.lifecycleScope
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationServices
-import com.google.firebase.auth.FirebaseAuth
-import kotlinx.coroutines.launch
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
-import android.annotation.SuppressLint
 import android.app.AlarmManager
-import android.app.AlertDialog
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -22,110 +10,116 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
-import androidx.annotation.RequiresApi
+import android.widget.TextView
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.launch
 import java.util.Calendar
-import java.util.Date
 
 class MainScreen : AppCompatActivity() {
     private lateinit var locationClient: FusedLocationProviderClient
     private lateinit var locationText: TextView
     private lateinit var usernameText: TextView
 
-    private val LOCATION_PERMISSION_REQUEST = 1001
-    private val weatherApi = Retrofit.Builder()
-        .baseUrl("https://api.openweathermap.org/")
-        .addConverterFactory(GsonConverterFactory.create())
-        .build()
-        .create(WeatherApi::class.java)
+    companion object {
+        private const val LOCATION_PERMISSION_REQUEST_CODE = 1001
+        private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 2001
+        private const val NOTIFICATION_CHANNEL_ID = "diet_channel"
+        private const val ALARM_PENDING_INTENT_REQUEST_CODE = 121
+    }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         createNotificationChannel()
         scheduleNotification()
+
         setContentView(R.layout.activity_main_screen)
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets
         }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            requestPermissions(
-                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                2001
-            )
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    NOTIFICATION_PERMISSION_REQUEST_CODE
+                )
+            }
         }
-        // Initialize the TextView and Button from the layout
+
         val user = FirebaseAuth.getInstance().currentUser
         locationText = findViewById(R.id.Location)
         usernameText = findViewById(R.id.Username)
-        usernameText.text = "Username:" + user?.email
-        // Initialize the location provider client
+        usernameText.text = "Username: ${user?.email ?: "Unknown"}"
+
         locationClient = LocationServices.getFusedLocationProviderClient(this)
-
         getCurrentLocation()
-
-
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "Diet Tracker Reminders",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Daily diet reminders"
+            }
 
-        val channel = NotificationChannel(
-            "diet_channel",
-            "Diet Tracker Reminders",
-            NotificationManager.IMPORTANCE_DEFAULT
-        )
-
-        channel.description = "Daily diet reminders"
-
-        val manager =
-            getSystemService(NOTIFICATION_SERVICE)
-                    as NotificationManager
-
-        manager.createNotificationChannel(channel)
+            val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            manager.createNotificationChannel(channel)
+        }
     }
 
     private fun getCurrentLocation() {
-        // Check if the location permission is granted
         if (ActivityCompat.checkSelfPermission(
                 this,
                 Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED &&
+            ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_COARSE_LOCATION
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            // If permission is not granted, request it from the user
             ActivityCompat.requestPermissions(
                 this,
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
-                LOCATION_PERMISSION_REQUEST
+                LOCATION_PERMISSION_REQUEST_CODE
             )
             return
         }
 
-        // Fetch the last known location
         locationClient.lastLocation.addOnSuccessListener { location ->
             if (location != null) {
-                // If location is available, extract latitude and longitude
                 val lat = location.latitude
                 val lon = location.longitude
-
-                // Display location in the TextView
                 locationText.text = "Latitude: $lat\nLongitude: $lon"
                 getWeather(lat, lon)
-
             } else {
-                // If location is null, display an error message
                 locationText.text = "Unable to get location"
             }
+        }.addOnFailureListener { e ->
+            locationText.text = "Location error: ${e.message}"
         }
     }
 
-    // Handle the result of the permission request
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<String>,
@@ -133,37 +127,31 @@ class MainScreen : AppCompatActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
-        // Check if the permission was granted
-        if (requestCode == LOCATION_PERMISSION_REQUEST &&
+        if (requestCode == LOCATION_PERMISSION_REQUEST_CODE &&
             grantResults.isNotEmpty() &&
             grantResults[0] == PackageManager.PERMISSION_GRANTED
         ) {
-            // If permission is granted, fetch the location
             getCurrentLocation()
-        } else {
-            // If permission is denied, update the TextView with an error message
+        } else if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
             locationText.text = "Location permission denied"
         }
     }
 
     private fun getWeather(lat: Double, lon: Double) {
-
         lifecycleScope.launch {
             try {
-
-                val weather = weatherApi.getCurrentWeather(
+                val weather = RetrofitClient.weatherApi.getCurrentWeather(
                     lat = lat,
                     lon = lon,
-                    apiKey = "bc9d58ed501fc4fd725c26f48017734f"
+                    apiKey = RetrofitClient.WEATHER_API_KEY
                 )
 
                 locationText.text =
                     "Location: ${weather.name}\n" +
                             "Temperature: ${weather.main.temp}°F\n" +
-                            "Feels like: ${weather.main.feels_like}°F\n" +
-                            "Condition: ${weather.weather[0].description}\n" +
+                            "Feels like: ${weather.main.feelsLike}°F\n" +
+                            "Condition: ${weather.weather.firstOrNull()?.description ?: "N/A"}\n" +
                             "Humidity: ${weather.main.humidity}%"
-
             } catch (e: Exception) {
                 locationText.text = "Weather error: ${e.message}"
                 e.printStackTrace()
@@ -171,38 +159,13 @@ class MainScreen : AppCompatActivity() {
         }
     }
 
-    @SuppressLint("ScheduleExactAlarm")
-
-    private fun showAlert(time: Long, title: String, message: String) {
-        // Format the time for display
-        val date = Date(time)
-        val dateFormat = android.text.format.DateFormat.getLongDateFormat(applicationContext)
-        val timeFormat = android.text.format.DateFormat.getTimeFormat(applicationContext)
-
-        // Create and show an alert dialog with notification details
-        AlertDialog.Builder(this)
-            .setTitle("Notification Scheduled")
-            .setMessage(
-                "Title: $title\nMessage: $message\nAt: ${dateFormat.format(date)} ${
-                    timeFormat.format(
-                        date
-                    )
-                }"
-            )
-            .setPositiveButton("Okay") { _, _ -> }
-            .show()
-    }
-
     private fun scheduleNotification() {
-
-        val alarmManager =
-            getSystemService(ALARM_SERVICE) as AlarmManager
-
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(this, Notification::class.java)
 
         val pendingIntent = PendingIntent.getBroadcast(
             this,
-            121,
+            ALARM_PENDING_INTENT_REQUEST_CODE,
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
@@ -213,8 +176,6 @@ class MainScreen : AppCompatActivity() {
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
 
-            // If 6 PM already passed today,
-            // start tomorrow.
             if (timeInMillis <= System.currentTimeMillis()) {
                 add(Calendar.DAY_OF_YEAR, 1)
             }
@@ -226,39 +187,5 @@ class MainScreen : AppCompatActivity() {
             AlarmManager.INTERVAL_DAY,
             pendingIntent
         )
-    }
-
-
-    fun checkNotificationPermissions(context: Context): Boolean {
-        // Check if notification permissions are granted
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val notificationManager =
-                context.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-
-            val isEnabled = notificationManager.areNotificationsEnabled()
-
-            if (!isEnabled) {
-                // Open the app notification settings if notifications are not enabled
-                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                intent.putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                context.startActivity(intent)
-
-                return false
-            }
-        } else {
-            val areEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
-
-            if (!areEnabled) {
-                // Open the app notification settings if notifications are not enabled
-                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                intent.putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                context.startActivity(intent)
-
-                return false
-            }
-        }
-
-        // Permissions are granted
-        return true
     }
 }

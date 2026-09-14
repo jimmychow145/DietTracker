@@ -1,6 +1,5 @@
 package com.example.diettracker
 
-import android.content.ContentValues.TAG
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
@@ -16,10 +15,13 @@ import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.firestore
-import kotlin.math.log
 
 class AuthScreen : AppCompatActivity() {
     private lateinit var auth: FirebaseAuth
+
+    companion object {
+        private const val TAG = "AuthScreen"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,94 +33,111 @@ class AuthScreen : AppCompatActivity() {
             insets
         }
 
-        // Find the button from the layout
+        auth = Firebase.auth
+
+        val emailInput = findViewById<EditText>(R.id.Email)
+        val passwordInput = findViewById<EditText>(R.id.Password)
         val signInBtn = findViewById<Button>(R.id.SignInButton)
         val signUpBtn = findViewById<Button>(R.id.SignUpButton)
-        auth = Firebase.auth
+
         signInBtn.setOnClickListener {
-            signIn(findViewById<EditText>(R.id.Email).getText().toString(), findViewById<EditText>(R.id.Password).getText().toString())
+            val email = emailInput.text.toString().trim()
+            val password = passwordInput.text.toString().trim()
+            if (validateInputs(email, password)) {
+                signIn(email, password)
+            }
         }
+
         signUpBtn.setOnClickListener {
-            signUp(findViewById<EditText>(R.id.Email).getText().toString(), findViewById<EditText>(R.id.Password).getText().toString())
-
+            val email = emailInput.text.toString().trim()
+            val password = passwordInput.text.toString().trim()
+            if (validateInputs(email, password)) {
+                signUp(email, password)
+            }
         }
-
-
     }
+
+    private fun validateInputs(email: String, password: String): Boolean {
+        if (email.isEmpty()) {
+            Toast.makeText(this, "Please enter an email address", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        if (password.isEmpty()) {
+            Toast.makeText(this, "Please enter a password", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        return true
+    }
+
     private fun signUp(email: String, password: String) {
-        // [START create_user_with_email]
         auth.createUserWithEmailAndPassword(email, password)
             .addOnCompleteListener(this) { task ->
                 if (task.isSuccessful) {
-                    // Sign in success, update UI with the signed-in user's information
                     Log.d(TAG, "createUserWithEmail:success")
                     val user = auth.currentUser
+                    val userId = user?.uid ?: return@addOnCompleteListener
                     val db = Firebase.firestore
 
                     val userData = hashMapOf(
-                        "DisplayName" to user?.email.toString(),
+                        "DisplayName" to (user.email ?: ""),
                         "DailyCalorieGoal" to 1919,
                         "MacroGoal" to hashMapOf(
                             "Carb" to 120,
                             "Fat" to 30,
-                            "Protein" to 100
-                        )
+                            "Protein" to 100,
+                        ),
                     )
 
-                    val logdata = hashMapOf( "action" to "signUp", "time" to Timestamp.now())
+                    val logData = hashMapOf("action" to "signUp", "time" to Timestamp.now())
+                    db.collection("logs").add(logData)
 
-                    db.collection("logs").add(logdata)
-
-                    // Add a new document with a generated ID
-                    db.collection("users").document(user!!.uid)
+                    db.collection("users").document(userId)
                         .set(userData)
-                        .addOnSuccessListener { documentReference ->
-                            Log.d("Firestore", "DocumentSnapshot added with ID: ${user.uid}")
+                        .addOnSuccessListener {
+                            Log.d(TAG, "DocumentSnapshot added with ID: $userId")
                         }
                         .addOnFailureListener { e ->
-                            Log.w("Firestore", "Error adding document", e)
+                            Log.w(TAG, "Error adding document", e)
                         }
 
-
-                    val intent = Intent(this, MainScreen::class.java)
-                    startActivity(intent)
+                    navigateToMainScreen()
                 } else {
-                    // If sign in fails, display a message to the user.
                     Log.w(TAG, "createUserWithEmail:failure", task.exception)
                     Toast.makeText(
                         baseContext,
-                        "Authentication failed.",
+                        "Authentication failed: ${task.exception?.localizedMessage}",
                         Toast.LENGTH_SHORT,
                     ).show()
                 }
             }
-        // [END create_user_with_email]
     }
 
     private fun signIn(email: String, password: String) {
-        // [START sign_in_with_email]
         auth.signInWithEmailAndPassword(email, password)
             .addOnCompleteListener(this) { task ->
                 if (task.isSuccessful) {
-                    // Sign in success, update UI with the signed-in user's information
                     Log.d(TAG, "signInWithEmail:success")
-                    val logdata = hashMapOf( "action" to "signin", "time" to Timestamp.now())
+                    val logData = hashMapOf("action" to "signin", "time" to Timestamp.now())
                     val db = Firebase.firestore
+                    db.collection("logs").add(logData)
 
-                    db.collection("logs").add(logdata)
-                    val user = auth.currentUser
-                    val intent = Intent(this, MainScreen::class.java)
-                    startActivity(intent)
+                    navigateToMainScreen()
                 } else {
-                    // If sign in fails, display a message to the user.
                     Log.w(TAG, "signInWithEmail:failure", task.exception)
                     Toast.makeText(
                         baseContext,
-                        "Authentication failed.",
+                        "Authentication failed: ${task.exception?.localizedMessage}",
                         Toast.LENGTH_SHORT,
                     ).show()
                 }
             }
-        // [END sign_in_with_email]
+    }
+
+    private fun navigateToMainScreen() {
+        val intent = Intent(this, MainScreen::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        startActivity(intent)
+        finish()
     }
 }
