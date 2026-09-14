@@ -5,7 +5,6 @@ import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -24,7 +23,14 @@ import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
+/**
+ * MainScreen activity for the Diet Tracker application.
+ * Handles displaying user profile information, retrieving location & weather data,
+ * and scheduling daily notification reminders.
+ */
 class MainScreen : AppCompatActivity() {
+
+    // UI and Location components
     private lateinit var locationClient: FusedLocationProviderClient
     private lateinit var locationText: TextView
     private lateinit var usernameText: TextView
@@ -38,18 +44,24 @@ class MainScreen : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Enable edge-to-edge UI layout
         enableEdgeToEdge()
 
+        // Set up notification system and daily alarms
         createNotificationChannel()
         scheduleNotification()
 
         setContentView(R.layout.activity_main_screen)
+
+        // Adjust layout padding to accommodate system bars (status bar, navigation bar)
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets
         }
 
+        // Request POST_NOTIFICATIONS permission for Android 13 (API 33) and above if not already granted
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(
                     this,
@@ -64,15 +76,21 @@ class MainScreen : AppCompatActivity() {
             }
         }
 
+        // Display current Firebase user email
         val user = FirebaseAuth.getInstance().currentUser
         locationText = findViewById(R.id.Location)
         usernameText = findViewById(R.id.Username)
         usernameText.text = "Username: ${user?.email ?: "Unknown"}"
 
+        // Initialize location provider client and fetch current location
         locationClient = LocationServices.getFusedLocationProviderClient(this)
         getCurrentLocation()
     }
 
+    /**
+     * Creates a notification channel required on Android O (API 26) and higher
+     * for sending daily diet tracker reminders.
+     */
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -88,6 +106,10 @@ class MainScreen : AppCompatActivity() {
         }
     }
 
+    /**
+     * Checks location permissions and retrieves the user's last known location.
+     * If permission is granted, initiates weather data lookup using latitude & longitude coordinates.
+     */
     private fun getCurrentLocation() {
         if (ActivityCompat.checkSelfPermission(
                 this,
@@ -106,6 +128,7 @@ class MainScreen : AppCompatActivity() {
             return
         }
 
+        // Fetch last known location asynchronously
         locationClient.lastLocation.addOnSuccessListener { location ->
             if (location != null) {
                 val lat = location.latitude
@@ -120,6 +143,9 @@ class MainScreen : AppCompatActivity() {
         }
     }
 
+    /**
+     * Callback for handling runtime permission request results (e.g., location permission).
+     */
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<String>,
@@ -137,6 +163,10 @@ class MainScreen : AppCompatActivity() {
         }
     }
 
+    /**
+     * Fetches current weather details using Retrofit in a coroutine on lifecycleScope
+     * and updates the UI with location name, temperature, condition, and humidity.
+     */
     private fun getWeather(lat: Double, lon: Double) {
         lifecycleScope.launch {
             try {
@@ -159,8 +189,11 @@ class MainScreen : AppCompatActivity() {
         }
     }
 
+    /**
+     * Schedules a daily repeating alarm at 6:00 PM to trigger the notification broadcast receiver.
+     */
     private fun scheduleNotification() {
-        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
         val intent = Intent(this, Notification::class.java)
 
         val pendingIntent = PendingIntent.getBroadcast(
@@ -176,11 +209,13 @@ class MainScreen : AppCompatActivity() {
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
 
+            // If 6 PM has already passed today, set for tomorrow
             if (timeInMillis <= System.currentTimeMillis()) {
                 add(Calendar.DAY_OF_YEAR, 1)
             }
         }
 
+        // Set daily repeating wakeup alarm
         alarmManager.setRepeating(
             AlarmManager.RTC_WAKEUP,
             calendar.timeInMillis,
